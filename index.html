@@ -20,6 +20,50 @@
   }
   .stats span { background: #e8eaf6; padding: 3px 10px; border-radius: 12px; margin: 0 4px; }
 
+  /* Sync bar */
+  .sync-bar {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-bottom: 14px; font-size: 12px; color: #90a4ae;
+  }
+  .sync-bar .sync-btn {
+    padding: 4px 14px; border-radius: 14px; border: 1px solid #c5cae9;
+    background: #e8eaf6; color: #5c6bc0; font-size: 12px; cursor: pointer;
+  }
+  .sync-bar .sync-btn:active { background: #c5cae9; }
+  .sync-bar .sync-status { font-size: 11px; }
+  .sync-bar .setup-link {
+    color: #5c6bc0; text-decoration: underline; cursor: pointer;
+  }
+
+  /* Setup modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 16px; padding: 24px 20px;
+    max-width: 380px; width: 100%; box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  }
+  .modal h2 { font-size: 17px; margin-bottom: 16px; text-align: center; color: #1a237e; }
+  .modal label { font-size: 13px; color: #555; display: block; margin-bottom: 4px; }
+  .modal input, .modal textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 10px;
+    font-size: 14px; margin-bottom: 12px; font-family: inherit;
+  }
+  .modal input:focus, .modal textarea:focus { outline: none; border-color: #5c6bc0; }
+  .modal textarea { height: 60px; resize: none; }
+  .modal .hint { font-size: 11px; color: #b0bec5; margin-top: -8px; margin-bottom: 16px; }
+  .modal .btn-row { display: flex; gap: 10px; }
+  .modal .btn-row button {
+    flex: 1; padding: 10px; border-radius: 10px; border: none;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .modal .btn-primary { background: #5c6bc0; color: #fff; }
+  .modal .btn-primary:active { background: #3f51b5; }
+  .modal .btn-secondary { background: #f5f5f5; color: #666; }
+  .modal .btn-secondary:active { background: #e0e0e0; }
+
   /* Category groups */
   .cat-group { margin-bottom: 14px; }
   .cat-header {
@@ -116,9 +160,31 @@
   <span id="pendingCount">0 待买</span>
 </div>
 
+<div class="sync-bar">
+  <span class="sync-status" id="syncStatus">☁️ 未同步</span>
+  <button class="sync-btn" id="syncBtn" onclick="manualSync()">同步</button>
+  <span class="setup-link" onclick="showSetup()">设置</span>
+</div>
+
 <div id="app"></div>
 <button class="reset-btn" onclick="resetAll()">🗑 重置所有勾选</button>
-<div class="footer">点击物品切换已买状态 ✓ 状态自动保存在本机</div>
+<div class="footer">点击物品切换 ✓ 多设备同步 · 状态自动保存</div>
+
+<!-- Sync Setup Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2>☁️ 同步设置</h2>
+    <label>GitHub 令牌</label>
+    <textarea id="tokenInput" placeholder="输入 ghp_xxxxxxxxxxxx 令牌"></textarea>
+    <div class="hint">令牌只需要访问一个公开仓库，用完可随时吊销</div>
+    <label>仓库名（可选）</label>
+    <input id="repoInput" value="BarryLiu-agent/shopping-list" placeholder="用户名/仓库名">
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="hideSetup()">取消</button>
+      <button class="btn-primary" onclick="saveSetup()">保存</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ─── Data ───────────────────────────────────────────────────
@@ -126,78 +192,78 @@ const RAW_DATA = {
   "宝宝篇": {
     "喂养类": [
       { name: "奶瓶", brand: "贝亲", note: "160ml玻璃+240ml塑料（240带把手带重力球）" },
-      { name: "奶嘴", brand: "" },
+      { name: "奶嘴" },
       { name: "奶瓶刷", brand: "", price: 23, initBought: true },
-      { name: "奶瓶清洗剂", brand: "", note: "优先看成分温和" },
+      { name: "奶瓶清洗剂", note: "优先看成分温和" },
       { name: "硅胶软勺", brand: "嫚熙", price: 13.89, initBought: true, note: "1-2个" },
       { name: "辅食碗", brand: "婧麒", price: 14.71, initBought: true },
-      { name: "安抚奶嘴", brand: "", note: "先备1个" },
-      { name: "储奶袋", brand: "", note: "视情况看是否要买" },
-      { name: "奶粉", brand: "", note: "先备1小罐（看看母婴店/国补赠送）：爱他美" }
+      { name: "安抚奶嘴", note: "先备1个" },
+      { name: "储奶袋", note: "视情况看是否要买" },
+      { name: "奶粉", note: "先备1小罐（看看母婴店/国补赠送）：爱他美" }
     ],
     "日常消耗类": [
       { name: "云柔巾", brand: "可心柔", price: 60.6, initBought: true, note: "60抽17包+40抽18包" },
       { name: "棉柔巾", brand: "可心柔/德祐", price: 44.76, initBought: true, note: "100抽6包+80抽2包" },
       { name: "湿巾", brand: "德祐", price: 5.24, initBought: true, note: "1包 先不着急买" },
-      { name: "纸尿裤", brand: "" },
+      { name: "纸尿裤" },
       { name: "一次性隔尿垫", brand: "德祐/嫚熙", price: 52.7, initBought: true, note: "M码3包共60片，L码1包20片" },
       { name: "水洗隔尿垫", brand: "婧麒", price: 68, initBought: true, note: "2条" },
       { name: "婴儿棉签", brand: "十月结晶", price: 7.89, initBought: true, note: "200支1盒" }
     ],
     "衣物类": [
-      { name: "半背衣/包屁衣", brand: "", note: "52码各2-3件；59码各两件" },
-      { name: "胎帽", brand: "", note: "2顶" },
-      { name: "胎袜", brand: "", note: "2双" },
+      { name: "半背衣/包屁衣", note: "52码各2-3件；59码各两件" },
+      { name: "胎帽", note: "2顶" },
+      { name: "胎袜", note: "2双" },
       { name: "包被", brand: "小揪揪", price: 65.71, initBought: true, note: "1条" },
       { name: "包单", brand: "婧麒", price: 55.35, initBought: true, note: "2条（双层95*95）送1条70*70" },
       { name: "纱布浴巾", brand: "小揪揪", price: 73.86, initBought: true, note: "2条（95*95）" },
       { name: "小方巾", brand: "婧麒", price: 17.65, initBought: true, note: "5条" },
       { name: "拍嗝巾", brand: "十月结晶", price: 26.85, initBought: true, note: "2条" },
-      { name: "婴儿防惊跳抱被", brand: "", note: "视情况看是否要买" },
-      { name: "儿童伸缩衣架", brand: "", note: "先备20个，带夹的也要买" }
+      { name: "婴儿防惊跳抱被", note: "视情况看是否要买" },
+      { name: "儿童伸缩衣架", note: "先备20个，带夹的也要买" }
     ],
     "洗护类": [
       { name: "婴儿面霜", brand: "悦哺", price: 8.8, note: "10g" },
       { name: "护臀霜", brand: "拜耳", price: 115, initBought: true, note: "100g两支" },
       { name: "抚触油", brand: "戴可思", price: 33.04, initBought: true, note: "100ML" },
       { name: "洗护二合一", brand: "贝德美" },
-      { name: "婴儿洗衣机", brand: "", note: "视情况看是否要买" },
+      { name: "婴儿洗衣机", note: "视情况看是否要买" },
       { name: "浴盆；洗脸盆", brand: "iuu", price: 70, initBought: true, note: "浴盆+3个小盆" },
       { name: "水温计", brand: "嫚熙", price: 13.39, initBought: true },
-      { name: "婴儿体温计", brand: "" },
-      { name: "指甲剪套装", brand: "", price: 20, initBought: true }
+      { name: "婴儿体温计" },
+      { name: "指甲剪套装", price: 20, initBought: true }
     ],
     "睡眠/家具类": [
-      { name: "拼接床", brand: "", note: "先不着急买" },
+      { name: "拼接床", note: "先不着急买" },
       { name: "尿布台", brand: "ABCmokoo", price: 105.16, initBought: true },
-      { name: "护理台", brand: "", price: 389, initBought: true },
-      { name: "消毒柜", brand: "" },
-      { name: "婴儿床", brand: "", price: 175, initBought: true },
-      { name: "恒温壶", brand: "", note: "不需要买" },
-      { name: "定型枕", brand: "" },
-      { name: "盖毯", brand: "" }
+      { name: "护理台", price: 389, initBought: true },
+      { name: "消毒柜" },
+      { name: "婴儿床", price: 175, initBought: true },
+      { name: "恒温壶", note: "不需要买" },
+      { name: "定型枕" },
+      { name: "盖毯" }
     ],
     "出行类": [
-      { name: "安全座椅", brand: "", note: "先不着急买" },
-      { name: "婴儿推车", brand: "" }
+      { name: "安全座椅", note: "先不着急买" },
+      { name: "婴儿推车" }
     ],
     "补剂": [
-      { name: "AD/D3", brand: "" }
+      { name: "AD/D3" }
     ]
   },
   "妈妈篇": {
     "待产用品": [
-      { name: "刀纸", brand: "" },
+      { name: "刀纸" },
       { name: "产褥垫", brand: "嫚熙", price: 59.7, initBought: true, note: "基础款2包进阶款1包共30片" },
       { name: "一次性内裤", brand: "嫚熙/德祐", price: 17.94, note: "11条" },
-      { name: "安心裤", brand: "", note: "夜用款 备20片左右" },
-      { name: "月子服", brand: "", note: "2-3套" },
-      { name: "拖鞋/帽子", brand: "", note: "帽子2顶；包脚跟拖鞋1双" },
-      { name: "吸奶器", brand: "", note: "视情况看是否要买" },
+      { name: "安心裤", note: "夜用款 备20片左右" },
+      { name: "月子服", note: "2-3套" },
+      { name: "拖鞋/帽子", note: "帽子2顶；包脚跟拖鞋1双" },
+      { name: "吸奶器", note: "视情况看是否要买" },
       { name: "阴道冲洗器", brand: "嫚熙", price: 20, initBought: true },
-      { name: "马桶垫", brand: "", price: 3.15, initBought: true },
+      { name: "马桶垫", price: 3.15, initBought: true },
       { name: "碘伏棉签", brand: "可孚", price: 5.09, initBought: true, note: "1盒50支" },
-      { name: "产后收腹带", brand: "", note: "剖腹产用？" }
+      { name: "产后收腹带", note: "剖腹产用？" }
     ]
   }
 };
@@ -213,25 +279,120 @@ const DOCS = [
   "现金/银行卡 少量"
 ];
 
-// ─── Persistence ────────────────────────────────────────────
-const STORAGE_KEY = 'shopping_list_state';
-const DOC_KEY = 'shopping_list_docs';
+// ─── Persistence (Local) ────────────────────────────────────
+const LOCAL_STATE_KEY = 'sl_local_state';
+const LOCAL_DOC_KEY = 'sl_local_docs';
+const SYNC_CONFIG_KEY = 'sl_sync_config';
 
-function loadState() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; }
+function loadLocal(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || {}; } catch { return {}; }
 }
-function saveState(state) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-function getDocState() {
-  try { return JSON.parse(localStorage.getItem(DOC_KEY)) || {}; } catch { return {}; }
-}
-function saveDocState(state) {
-  localStorage.setItem(DOC_KEY, JSON.stringify(state));
+function saveLocal(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
 }
 
-// Build key for each item
+function loadState()    { return loadLocal(LOCAL_STATE_KEY); }
+function saveState(s)   { saveLocal(LOCAL_STATE_KEY, s); }
+function loadDocs()     { return loadLocal(LOCAL_DOC_KEY); }
+function saveDocs(d)    { saveLocal(LOCAL_DOC_KEY, d); }
+
+function loadSyncCfg()  { return loadLocal(SYNC_CONFIG_KEY); }
+function saveSyncCfg(c) { saveLocal(SYNC_CONFIG_KEY, c); }
+
 function itemKey(cat, sub, name) { return `${cat}|${sub}|${name}`; }
+
+// ─── Cloud Sync (GitHub) ────────────────────────────────────
+const STATE_FILE = 'state.json';
+
+async function fetchCloudState(token, repo) {
+  const url = `https://api.github.com/repos/${repo}/contents/${STATE_FILE}`;
+  const res = await fetch(url, {
+    headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github.v3+json" }
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const json = atob(data.content.replace(/\n/g, ''));
+  return JSON.parse(json);
+}
+
+async function pushCloudState(token, repo, state, docs, sha) {
+  const url = `https://api.github.com/repos/${repo}/contents/${STATE_FILE}`;
+  const payload = JSON.stringify({ items: state, docs: docs });
+  const content = btoa(unescape(encodeURIComponent(payload)));
+  const body = { message: "sync", content: content, branch: "main" };
+  if (sha) body.sha = sha;
+  const res = await fetch(url, {
+    method: sha ? "PUT" : "PUT",
+    headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()).content.sha;
+}
+
+let _lastSyncSha = null;
+let _syncing = false;
+let _syncError = null;
+
+function updateSyncUI(status, msg) {
+  const el = document.getElementById('syncStatus');
+  if (status === 'ok')       { el.innerHTML = '✅ 已同步'; el.style.color = '#43a047'; }
+  else if (status === 'err') { el.innerHTML = `⚠️ ${msg}`; el.style.color = '#e53935'; }
+  else if (status === 'busy'){ el.innerHTML = '🔄 同步中...'; el.style.color = '#fb8c00'; }
+  else if (status === 'off') { el.innerHTML = '☁️ 未同步'; el.style.color = '#90a4ae'; }
+}
+
+async function syncToCloud() {
+  const cfg = loadSyncCfg();
+  if (!cfg || !cfg.token || !cfg.repo) {
+    updateSyncUI('off');
+    return;
+  }
+  if (_syncing) return;
+  _syncing = true;
+  updateSyncUI('busy');
+  try {
+    const state = loadState();
+    const docs = loadDocs();
+    const sha = await pushCloudState(cfg.token, cfg.repo, state, docs, _lastSyncSha || undefined);
+    _lastSyncSha = sha;
+    _syncError = null;
+    updateSyncUI('ok');
+  } catch (e) {
+    _syncError = e.message;
+    updateSyncUI('err', e.message.includes('401') ? '令牌失效' : e.message.includes('404') ? '仓库不存在' : e.message);
+  }
+  _syncing = false;
+}
+
+async function syncFromCloud() {
+  const cfg = loadSyncCfg();
+  if (!cfg || !cfg.token || !cfg.repo) return;
+  try {
+    const data = await fetchCloudState(cfg.token, cfg.repo);
+    if (data) {
+      if (data.items) saveState(data.items);
+      if (data.docs) saveDocs(data.docs);
+      _syncError = null;
+    }
+  } catch (e) {
+    // silent on first load
+  }
+}
+
+async function manualSync() {
+  const cfg = loadSyncCfg();
+  if (!cfg || !cfg.token) {
+    showSetup();
+    return;
+  }
+  updateSyncUI('busy', '');
+  // First upload local, then pull remote
+  await syncToCloud();
+  await syncFromCloud();
+  render();
+}
 
 // ─── Colors ─────────────────────────────────────────────────
 const CAT_COLORS = {
@@ -252,7 +413,7 @@ const SUB_COLORS = {
 // ─── Render ─────────────────────────────────────────────────
 function render() {
   const state = loadState();
-  const docState = getDocState();
+  const docState = loadDocs();
   const app = document.getElementById('app');
   let total = 0, bought = 0;
   let html = '';
@@ -285,7 +446,7 @@ function render() {
           </div>`;
       }
       subHtml += `
-        <div class="sub-section" data-sub="${subCat}">
+        <div class="sub-section">
           <div class="sub-header" style="background:${sc.bg};color:${sc.accent}" onclick="toggleSub(this)">
             ${subCat} <span style="margin-left:auto;font-size:10px;opacity:0.5">▾</span>
           </div>
@@ -325,30 +486,30 @@ function render() {
   html += docHtml;
   app.innerHTML = html;
 
-  // Update stats
   document.getElementById('totalCount').textContent = total + ' 项';
   document.getElementById('boughtCount').textContent = bought + ' 已买';
   document.getElementById('pendingCount').textContent = (total - bought) + ' 待买';
 
-  // Bind click events
+  // Bind clicks
   document.querySelectorAll('.item-row').forEach(el => {
-    el.addEventListener('click', function(e) {
+    el.addEventListener('click', function() {
       const key = this.dataset.key;
       const s = loadState();
-      const current = s[key] !== undefined ? s[key] : false;
-      s[key] = !current;
+      s[key] = !(s[key] !== undefined ? s[key] : false);
       saveState(s);
       render();
+      syncToCloud();
     });
   });
 
   document.querySelectorAll('.doc-item').forEach(el => {
-    el.addEventListener('click', function(e) {
+    el.addEventListener('click', function() {
       const dk = this.dataset.dockey;
-      const ds = getDocState();
+      const ds = loadDocs();
       ds[dk] = !(ds[dk] || false);
-      saveDocState(ds);
+      saveDocs(ds);
       render();
+      syncToCloud();
     });
   });
 }
@@ -367,13 +528,52 @@ function toggleSub(el) {
 
 function resetAll() {
   if (confirm('确认重置所有勾选状态？')) {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(DOC_KEY);
+    localStorage.removeItem(LOCAL_STATE_KEY);
+    localStorage.removeItem(LOCAL_DOC_KEY);
     render();
+    syncToCloud();
   }
 }
 
-document.addEventListener('DOMContentLoaded', render);
+// ─── Sync Setup Modal ───────────────────────────────────────
+function showSetup() {
+  const cfg = loadSyncCfg();
+  document.getElementById('tokenInput').value = cfg.token || '';
+  document.getElementById('repoInput').value = cfg.repo || 'BarryLiu-agent/shopping-list';
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function hideSetup() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+function saveSetup() {
+  const token = document.getElementById('tokenInput').value.trim();
+  const repo = document.getElementById('repoInput').value.trim() || 'BarryLiu-agent/shopping-list';
+  if (!token) { alert('请输入 GitHub 令牌'); return; }
+  saveSyncCfg({ token, repo });
+  hideSetup();
+  // Try to sync
+  syncFromCloud().then(() => {
+    render();
+    syncToCloud();
+  });
+}
+
+// ─── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  const cfg = loadSyncCfg();
+  if (cfg && cfg.token) {
+    await syncFromCloud();
+  }
+  render();
+  if (cfg && cfg.token) {
+    updateSyncUI('ok');
+  }
+});
+
+// Close modal on overlay click
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) hideSetup();
+});
 </script>
 
 </body>
