@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>待买清单</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #f5f7fa; color: #333; padding: 12px 10px 40px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 {
+    text-align: center; font-size: 22px; font-weight: 700;
+    color: #1a237e; padding: 18px 0 14px; letter-spacing: 2px;
+  }
+  .stats {
+    text-align: center; font-size: 13px; color: #78909c; margin-bottom: 16px;
+  }
+  .stats span { background: #e8eaf6; padding: 3px 10px; border-radius: 12px; margin: 0 4px; }
+
+  /* Category groups */
+  .cat-group { margin-bottom: 14px; }
+  .cat-header {
+    display: flex; align-items: center; padding: 10px 14px; border-radius: 12px;
+    font-size: 15px; font-weight: 700; margin-bottom: 6px; cursor: pointer;
+    user-select: none; transition: background 0.2s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cat-header, .sub-header, .item-check, .arrow { transition: none; }
+  }
+  .cat-header .arrow { margin-left: auto; transition: transform 0.25s; font-size: 12px; }
+  .cat-header.collapsed .arrow { transform: rotate(-90deg); }
+  .cat-badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; margin-left: 8px; opacity: 0.7; }
+
+  /* Sub-category section */
+  .sub-section { margin: 0 0 8px 0; border-radius: 10px; overflow: hidden; }
+  .sub-header {
+    padding: 7px 14px; font-size: 13px; font-weight: 600; letter-spacing: 1px;
+    display: flex; align-items: center;
+  }
+  .sub-header .count { font-weight: 400; font-size: 11px; margin-left: 8px; opacity: 0.6; }
+
+  /* Items */
+  .item-list { padding: 0; }
+  .item-row {
+    display: flex; align-items: center; padding: 10px 14px;
+    border-bottom: 1px solid rgba(0,0,0,0.04); gap: 10px;
+  }
+  .item-row:last-child { border-bottom: none; }
+
+  .item-check {
+    width: 22px; height: 22px; border-radius: 50%; border: 2px solid #bdbdbd;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: #fff; transition: all 0.2s;
+  }
+  .item-check.done { background: #4caf50; border-color: #4caf50; }
+
+  .item-body { flex: 1; min-width: 0; }
+  .item-name {
+    font-size: 15px; font-weight: 500; line-height: 1.4; color: #212121;
+  }
+  .item-name.done { text-decoration: line-through; color: #9e9e9e; }
+  .item-meta {
+    font-size: 12px; color: #78909c; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .item-meta .brand { background: #eceff1; padding: 0 6px; border-radius: 4px; }
+  .item-meta .price { color: #e53935; font-weight: 600; }
+  .item-meta .note { color: #90a4ae; width: 100%; margin-top: 2px; }
+
+  /* Doc section */
+  .doc-section {
+    margin-top: 20px; background: #fff; border-radius: 14px; overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .doc-header {
+    padding: 14px; font-size: 15px; font-weight: 700; color: #1a237e;
+    background: #e8eaf6; text-align: center; letter-spacing: 1px;
+  }
+  .doc-item {
+    display: flex; align-items: center; padding: 10px 14px; gap: 10px;
+    border-bottom: 1px solid #f5f5f5; font-size: 14px; line-height: 1.5;
+  }
+  .doc-item:last-child { border-bottom: none; }
+  .doc-num { color: #5c6bc0; font-weight: 700; font-size: 13px; width: 24px; flex-shrink: 0; }
+
+  /* Collapse */
+  .sub-section.collapsed .item-list { display: none; }
+
+  /* Footer */
+  .footer {
+    margin-top: 20px; text-align: center; font-size: 12px; color: #b0bec5;
+    padding-bottom: 20px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🛒 待买清单</h1>
+<div class="stats">
+  <span id="totalCount">0 项</span>
+  <span id="boughtCount">0 已买</span>
+  <span id="pendingCount">0 待买</span>
+</div>
+
+<div id="app"></div>
+
+<script>
+// ─── Data ───────────────────────────────────────────────────
+const DATA = {
+  "宝宝篇": {
+    "喂养类": [
+      { name: "奶瓶", brand: "贝亲", note: "160ml玻璃+240ml塑料（240带把手带重力球）" },
+      { name: "奶嘴", brand: "", note: "" },
+      { name: "奶瓶刷", brand: "", price: 23, bought: true, note: "" },
+      { name: "奶瓶清洗剂", brand: "", note: "优先看成分温和" },
+      { name: "硅胶软勺", brand: "嫚熙", price: 13.89, bought: true, note: "1-2个" },
+      { name: "辅食碗", brand: "婧麒", price: 14.71, bought: true, note: "" },
+      { name: "安抚奶嘴", brand: "", note: "先备1个" },
+      { name: "储奶袋", brand: "", note: "视情况看是否要买" },
+      { name: "奶粉", brand: "", note: "先备1小罐（看看母婴店/国补赠送）：爱他美" }
+    ],
+    "日常消耗类": [
+      { name: "云柔巾", brand: "可心柔", price: 60.6, bought: true, note: "60抽17包+40抽18包" },
+      { name: "棉柔巾", brand: "可心柔/德祐", price: 44.76, bought: true, note: "100抽6包+80抽2包" },
+      { name: "湿巾", brand: "德祐", price: 5.24, bought: true, note: "1包 先不着急买" },
+      { name: "纸尿裤", brand: "", note: "" },
+      { name: "一次性隔尿垫", brand: "德祐/嫚熙", price: 52.7, bought: true, note: "M码3包共60片，L码1包20片" },
+      { name: "水洗隔尿垫", brand: "婧麒", price: 68, bought: true, note: "2条" },
+      { name: "婴儿棉签", brand: "十月结晶", price: 7.89, bought: true, note: "200支1盒" }
+    ],
+    "衣物类": [
+      { name: "半背衣/包屁衣", brand: "", note: "52码各2-3件；59码各两件" },
+      { name: "胎帽", brand: "", note: "2顶" },
+      { name: "胎袜", brand: "", note: "2双" },
+      { name: "包被", brand: "小揪揪", price: 65.71, bought: true, note: "1条" },
+      { name: "包单", brand: "婧麒", price: 55.35, bought: true, note: "2条（双层95*95）送1条70*70" },
+      { name: "纱布浴巾", brand: "小揪揪", price: 73.86, bought: true, note: "2条（95*95）" },
+      { name: "小方巾", brand: "婧麒", price: 17.65, bought: true, note: "5条" },
+      { name: "拍嗝巾", brand: "十月结晶", price: 26.85, bought: true, note: "2条" },
+      { name: "婴儿防惊跳抱被", brand: "", note: "视情况看是否要买" },
+      { name: "儿童伸缩衣架", brand: "", note: "先备20个，带夹的也要买" }
+    ],
+    "洗护类": [
+      { name: "婴儿面霜", brand: "悦哺", price: 8.8, note: "10g" },
+      { name: "护臀霜", brand: "拜耳", price: 115, bought: true, note: "100g两支" },
+      { name: "抚触油", brand: "戴可思", price: 33.04, bought: true, note: "100ML" },
+      { name: "洗护二合一", brand: "贝德美", note: "" },
+      { name: "婴儿洗衣机", brand: "", note: "视情况看是否要买" },
+      { name: "浴盆；洗脸盆", brand: "iuu", price: 70, bought: true, note: "浴盆+3个小盆" },
+      { name: "水温计", brand: "嫚熙", price: 13.39, bought: true, note: "" },
+      { name: "婴儿体温计", brand: "", note: "" },
+      { name: "指甲剪套装", brand: "", price: 20, bought: true, note: "" }
+    ],
+    "睡眠/家具类": [
+      { name: "拼接床", brand: "", note: "先不着急买" },
+      { name: "尿布台", brand: "ABCmokoo", price: 105.16, bought: true, note: "" },
+      { name: "护理台", brand: "", price: 389, bought: true, note: "" },
+      { name: "消毒柜", brand: "", note: "" },
+      { name: "婴儿床", brand: "", price: 175, bought: true, note: "" },
+      { name: "恒温壶", brand: "", note: "不需要买" },
+      { name: "定型枕", brand: "", note: "" },
+      { name: "盖毯", brand: "", note: "" }
+    ],
+    "出行类": [
+      { name: "安全座椅", brand: "", note: "先不着急买" },
+      { name: "婴儿推车", brand: "", note: "" }
+    ],
+    "补剂": [
+      { name: "AD/D3", brand: "", note: "" }
+    ]
+  },
+  "妈妈篇": {
+    "待产用品": [
+      { name: "刀纸", brand: "", note: "" },
+      { name: "产褥垫", brand: "嫚熙", price: 59.7, bought: true, note: "基础款2包进阶款1包共30片" },
+      { name: "一次性内裤", brand: "嫚熙/德祐", price: 17.94, note: "11条" },
+      { name: "安心裤", brand: "", note: "夜用款 备20片左右" },
+      { name: "月子服", brand: "", note: "2-3套" },
+      { name: "拖鞋/帽子", brand: "", note: "帽子2顶；包脚跟拖鞋1双" },
+      { name: "吸奶器", brand: "", note: "视情况看是否要买" },
+      { name: "阴道冲洗器", brand: "嫚熙", price: 20, bought: true, note: "" },
+      { name: "马桶垫", brand: "", price: 3.15, bought: true, note: "" },
+      { name: "碘伏棉签", brand: "可孚", price: 5.09, bought: true, note: "1盒50支" },
+      { name: "产后收腹带", brand: "", note: "剖腹产用？" }
+    ]
+  }
+};
+
+const DOCS = [
+  "夫妻双方身份证原件及复印件",
+  "夫妻双方结婚证原件及复印件",
+  "夫妻双方户口本",
+  "产检本及全部产检资料",
+  "母子手册",
+  "医保卡",
+  "准生证",
+  "现金/银行卡 少量"
+];
+
+// ─── Category colors ────────────────────────────────────────
+const CAT_COLORS = {
+  "宝宝篇": { bg: "#e8f5e9", text: "#2e7d32", badge: "#a5d6a7" },
+  "妈妈篇": { bg: "#fff3e0", text: "#e65100", badge: "#ffcc80" }
+};
+const SUB_COLORS = {
+  "喂养类": { bg: "#e8f5e9", accent: "#66bb6a" },
+  "日常消耗类": { bg: "#e0f2f1", accent: "#26a69a" },
+  "衣物类": { bg: "#e3f2fd", accent: "#42a5f5" },
+  "洗护类": { bg: "#f3e5f5", accent: "#ab47bc" },
+  "睡眠/家具类": { bg: "#e8eaf6", accent: "#5c6bc0" },
+  "出行类": { bg: "#fff8e1", accent: "#ffa726" },
+  "补剂": { bg: "#fbe9e7", accent: "#ef5350" },
+  "待产用品": { bg: "#fff3e0", accent: "#ff7043" }
+};
+
+// ─── Render ─────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app');
+  let total = 0, bought = 0;
+  let html = '';
+
+  for (const [bigCat, subs] of Object.entries(DATA)) {
+    const cc = CAT_COLORS[bigCat] || { bg: '#f5f5f5', text: '#333', badge: '#ccc' };
+    let catTotal = 0, catBought = 0;
+    let subHtml = '';
+
+    for (const [subCat, items] of Object.entries(subs)) {
+      const sc = SUB_COLORS[subCat] || { bg: '#f5f5f5', accent: '#999' };
+      let siHtml = '';
+      for (const item of items) {
+        total++; catTotal++;
+        if (item.bought) { bought++; catBought++; }
+        const doneClass = item.bought ? 'done' : '';
+        siHtml += `
+          <div class="item-row">
+            <div class="item-check ${doneClass}">${item.bought ? '✓' : ''}</div>
+            <div class="item-body">
+              <div class="item-name ${doneClass}">${item.name}</div>
+              <div class="item-meta">
+                ${item.brand ? `<span class="brand">${item.brand}</span>` : ''}
+                ${item.price ? `<span class="price">¥${item.price}</span>` : ''}
+                ${item.note ? `<span class="note">${item.note}</span>` : ''}
+              </div>
+            </div>
+          </div>`;
+      }
+      subHtml += `
+        <div class="sub-section" data-sub="${subCat}">
+          <div class="sub-header" style="background:${sc.bg};color:${sc.accent}"
+               onclick="toggleSub(this)">
+            ${subCat}
+            <span class="count">${items.length}项</span>
+            <span class="arrow" style="margin-left:auto;font-size:10px">▾</span>
+          </div>
+          <div class="item-list">${siHtml}</div>
+        </div>`;
+    }
+
+    html += `
+      <div class="cat-group">
+        <div class="cat-header" style="background:${cc.bg};color:${cc.text}"
+             onclick="toggleCat(this)">
+          ${bigCat}
+          <span class="cat-badge" style="background:${cc.badge}">${catTotal}项 · ${catBought}已买</span>
+          <span class="arrow">▾</span>
+        </div>
+        ${subHtml}
+      </div>`;
+  }
+
+  // Documents
+  let docHtml = '';
+  for (let i = 0; i < DOCS.length; i++) {
+    docHtml += `
+      <div class="doc-item">
+        <div class="doc-num">${i+1}.</div>
+        <div>${DOCS[i]}</div>
+        <div style="margin-left:auto;width:20px;height:20px;border-radius:50%;border:2px solid #c5cae9;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;" onclick="this.style.background='#5c6bc0';this.style.borderColor='#5c6bc0';this.textContent='✓'"> </div>
+      </div>`;
+  }
+  docHtml = `
+    <div class="doc-section">
+      <div class="doc-header">📄 待办证件清单</div>
+      ${docHtml}
+    </div>`;
+
+  html += docHtml;
+  app.innerHTML = html;
+
+  document.getElementById('totalCount').textContent = total + ' 项';
+  document.getElementById('boughtCount').textContent = bought + ' 已买';
+  document.getElementById('pendingCount').textContent = (total - bought) + ' 待买';
+}
+
+// ─── Toggle functions ───────────────────────────────────────
+function toggleCat(el) {
+  el.classList.toggle('collapsed');
+  const group = el.closest('.cat-group');
+  const subs = group.querySelectorAll('.sub-section');
+  const collapsed = el.classList.contains('collapsed');
+  subs.forEach(s => {
+    if (collapsed) {
+      s.classList.add('collapsed');
+      const h = s.querySelector('.sub-header');
+      if (h) h.classList.add('collapsed');
+    } else {
+      s.classList.remove('collapsed');
+      const h = s.querySelector('.sub-header');
+      if (h) h.classList.remove('collapsed');
+    }
+  });
+}
+
+function toggleSub(el) {
+  el.classList.toggle('collapsed');
+  const section = el.closest('.sub-section');
+  section.classList.toggle('collapsed');
+}
+
+// ─── Init ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', render);
+</script>
+
+<div class="footer">点击大类或小类标题可折叠展开 ✓ 点击证件方框打勾</div>
+</body>
+</html>
