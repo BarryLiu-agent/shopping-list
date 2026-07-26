@@ -162,7 +162,8 @@
 
 <div class="sync-bar">
   <span class="sync-status" id="syncStatus">☁️ 未同步</span>
-  <button class="sync-btn" id="syncBtn" onclick="manualSync()">同步</button>
+  <button class="sync-btn" onclick="manualSync()">同步</button>
+  <button class="sync-btn" onclick="manualPull()">刷新</button>
   <span class="setup-link" onclick="showSetup()">设置</span>
 </div>
 
@@ -415,8 +416,18 @@ async function manualSync() {
     return;
   }
   updateSyncUI('busy', '');
-  // First upload local, then pull remote
   await syncToCloud();
+  await syncFromCloud();
+  render();
+}
+
+async function manualPull() {
+  const cfg = loadSyncCfg();
+  if (!cfg || !cfg.token) {
+    showSetup();
+    return;
+  }
+  updateSyncUI('busy', '');
   await syncFromCloud();
   render();
 }
