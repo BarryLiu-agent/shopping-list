@@ -304,6 +304,27 @@ function itemKey(cat, sub, name) { return `${cat}|${sub}|${name}`; }
 // ─── Cloud Sync (GitHub) ────────────────────────────────────
 const STATE_FILE = 'state.json';
 
+function utf8ToBase64(str) {
+  // Properly handle Unicode → UTF-8 bytes → base64
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToUtf8(base64) {
+  // base64 → UTF-8 bytes → string
+  const binary = atob(base64.replace(/\n/g, ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 async function fetchCloudState(token, repo) {
   const url = `https://api.github.com/repos/${repo}/contents/${STATE_FILE}`;
   const res = await fetch(url, {
@@ -312,23 +333,29 @@ async function fetchCloudState(token, repo) {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  const json = atob(data.content.replace(/\n/g, ''));
+  // Save SHA for later updates
+  _lastSyncSha = data.sha;
+  const json = base64ToUtf8(data.content);
   return JSON.parse(json);
 }
 
 async function pushCloudState(token, repo, state, docs, sha) {
   const url = `https://api.github.com/repos/${repo}/contents/${STATE_FILE}`;
   const payload = JSON.stringify({ items: state, docs: docs });
-  const content = btoa(unescape(encodeURIComponent(payload)));
+  const content = utf8ToBase64(payload);
   const body = { message: "sync", content: content, branch: "main" };
   if (sha) body.sha = sha;
   const res = await fetch(url, {
-    method: sha ? "PUT" : "PUT",
+    method: "PUT",
     headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github.v3+json", "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()).content.sha;
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`HTTP ${res.status}: ${errBody.slice(0, 100)}`);
+  }
+  const resData = await res.json();
+  return resData.content.sha;
 }
 
 let _lastSyncSha = null;
