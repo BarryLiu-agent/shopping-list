@@ -303,8 +303,8 @@ const DOCS = [
 ];
 
 // ─── Persistence (Local) ────────────────────────────────────
-const LOCAL_STATE_KEY = 'sl_local_state';
-const LOCAL_NOTES_KEY = 'sl_local_notes';
+const LOCAL_STATE_KEY = 'sl_local_state_v2';
+const LOCAL_NOTES_KEY = 'sl_local_notes_v2';
 const LOCAL_DOC_KEY = 'sl_local_docs';
 const SYNC_CONFIG_KEY = 'sl_sync_config';
 
@@ -589,11 +589,25 @@ function render() {
 // ─── Note Modal ─────────────────────────────────────────────
 let _editingNoteKey = null;
 
+// 查找物品在 Excel/数据中自带的默认备注
+function getItemDefaultNote(key) {
+  const parts = key.split('|');
+  if (parts.length !== 3) return '';
+  const [cat, sub, name] = parts;
+  try {
+    const items = (RAW_DATA[cat] || {})[sub] || [];
+    const item = items.find(i => i.name === name) || {};
+    return item.note || '';
+  } catch (e) { return ''; }
+}
+
 function openNoteModal(key, itemName) {
   _editingNoteKey = key;
   document.getElementById('noteItemName').textContent = itemName;
   const notes = loadNotes();
-  document.getElementById('noteInput').value = notes[key] !== undefined ? notes[key] : '';
+  // 优先显示用户改过的备注，否则显示原本自带的备注（可直接修改）
+  const val = notes[key] !== undefined ? notes[key] : getItemDefaultNote(key);
+  document.getElementById('noteInput').value = val;
   document.getElementById('noteModalOverlay').classList.add('show');
 }
 
@@ -606,11 +620,7 @@ function saveNote() {
   if (!_editingNoteKey) return;
   const notes = loadNotes();
   const val = document.getElementById('noteInput').value.trim();
-  if (val) {
-    notes[_editingNoteKey] = val;
-  } else {
-    delete notes[_editingNoteKey];
-  }
+  notes[_editingNoteKey] = val; // 空字符串表示清除该备注
   saveNotes(notes);
   hideNoteModal();
   render();
