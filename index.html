@@ -23,7 +23,7 @@
   /* Sync bar */
   .sync-bar {
     display: flex; align-items: center; justify-content: center; gap: 8px;
-    margin-bottom: 14px; font-size: 12px; color: #90a4ae;
+    margin-bottom: 14px; font-size: 12px; color: #90a4ae; flex-wrap: wrap;
   }
   .sync-bar .sync-btn {
     padding: 4px 14px; border-radius: 14px; border: 1px solid #c5cae9;
@@ -52,7 +52,7 @@
     font-size: 14px; margin-bottom: 12px; font-family: inherit;
   }
   .modal input:focus, .modal textarea:focus { outline: none; border-color: #5c6bc0; }
-  .modal textarea { height: 60px; resize: none; }
+  .modal textarea { height: 80px; resize: none; }
   .modal .hint { font-size: 11px; color: #b0bec5; margin-top: -8px; margin-bottom: 16px; }
   .modal .btn-row { display: flex; gap: 10px; }
   .modal .btn-row button {
@@ -63,6 +63,10 @@
   .modal .btn-primary:active { background: #3f51b5; }
   .modal .btn-secondary { background: #f5f5f5; color: #666; }
   .modal .btn-secondary:active { background: #e0e0e0; }
+  .modal .item-title {
+    text-align: center; font-size: 15px; font-weight: 600; color: #333;
+    background: #f5f7fa; border-radius: 10px; padding: 10px; margin-bottom: 14px;
+  }
 
   /* Category groups */
   .cat-group { margin-bottom: 14px; }
@@ -110,7 +114,16 @@
   }
   .item-meta .brand { background: #eceff1; padding: 0 6px; border-radius: 4px; }
   .item-meta .price { color: #e53935; font-weight: 600; }
-  .item-meta .note { color: #90a4ae; width: 100%; margin-top: 2px; }
+  .item-meta .note { color: #607d8b; background: #f1f8e9; padding: 0 6px; border-radius: 4px; width: 100%; margin-top: 2px; }
+
+  /* Note edit button */
+  .note-edit-btn {
+    flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: #f5f5f5; color: #90a4ae; font-size: 15px; cursor: pointer;
+    border: 1px solid #e0e0e0; transition: all 0.15s;
+  }
+  .note-edit-btn:active { background: #e8eaf6; color: #5c6bc0; border-color: #5c6bc0; }
 
   /* Doc section */
   .doc-section {
@@ -169,7 +182,7 @@
 
 <div id="app"></div>
 <button class="reset-btn" onclick="resetAll()">🗑 重置所有勾选</button>
-<div class="footer">点击物品切换 ✓ 多设备同步 · 状态自动保存</div>
+<div class="footer">点击物品打勾 · 点 ✎ 编辑备注 · 状态自动同步</div>
 
 <!-- Sync Setup Modal -->
 <div class="modal-overlay" id="modalOverlay">
@@ -187,14 +200,27 @@
   </div>
 </div>
 
+<!-- Note Edit Modal -->
+<div class="modal-overlay" id="noteModalOverlay">
+  <div class="modal">
+    <h2>📝 编辑备注</h2>
+    <div class="item-title" id="noteItemName"></div>
+    <textarea id="noteInput" placeholder="输入备注内容，留空则删除备注"></textarea>
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="hideNoteModal()">取消</button>
+      <button class="btn-primary" onclick="saveNote()">保存</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ─── Data ───────────────────────────────────────────────────
+// ─── Data（与 Excel 待买清单1 同步）────────────────────────
 const RAW_DATA = {
   "宝宝篇": {
     "喂养类": [
       { name: "奶瓶", brand: "贝亲", note: "160ml玻璃+240ml塑料（240带把手带重力球）" },
       { name: "奶嘴" },
-      { name: "奶瓶刷", brand: "", price: 23, initBought: true },
+      { name: "奶瓶刷", price: 23, initBought: true },
       { name: "奶瓶清洗剂", note: "优先看成分温和" },
       { name: "硅胶软勺", brand: "嫚熙", price: 13.89, initBought: true, note: "1-2个" },
       { name: "辅食碗", brand: "婧麒", price: 14.71, initBought: true },
@@ -203,7 +229,7 @@ const RAW_DATA = {
       { name: "奶粉", note: "先备1小罐（看看母婴店/国补赠送）：爱他美" }
     ],
     "日常消耗类": [
-      { name: "云柔巾", brand: "可心柔", price: 60.6, initBought: true, note: "60抽17包+40抽18包" },
+      { name: "云柔巾", brand: "可心柔", price: 140, initBought: true, note: "60抽17包+40抽18包+100抽24包" },
       { name: "棉柔巾", brand: "可心柔/德祐", price: 44.76, initBought: true, note: "100抽6包+80抽2包" },
       { name: "湿巾", brand: "德祐", price: 5.24, initBought: true, note: "1包 先不着急买" },
       { name: "纸尿裤" },
@@ -212,16 +238,15 @@ const RAW_DATA = {
       { name: "婴儿棉签", brand: "十月结晶", price: 7.89, initBought: true, note: "200支1盒" }
     ],
     "衣物类": [
-      { name: "半背衣/包屁衣", note: "52码各2-3件；59码各两件" },
-      { name: "胎帽", note: "2顶" },
-      { name: "胎袜", note: "2双" },
+      { name: "半背衣/包屁衣", price: 151.15, initBought: true, note: "52码半背衣1件+52码连体衣2件+59码连体衣3件" },
+      { name: "胎帽", price: 10.9, initBought: true, note: "1顶" },
+      { name: "胎袜", price: 12.9, initBought: true, note: "3双" },
       { name: "包被", brand: "小揪揪", price: 65.71, initBought: true, note: "1条" },
       { name: "包单", brand: "婧麒", price: 55.35, initBought: true, note: "2条（双层95*95）送1条70*70" },
       { name: "纱布浴巾", brand: "小揪揪", price: 73.86, initBought: true, note: "2条（95*95）" },
       { name: "小方巾", brand: "婧麒", price: 17.65, initBought: true, note: "5条" },
       { name: "拍嗝巾", brand: "十月结晶", price: 26.85, initBought: true, note: "2条" },
-      { name: "婴儿防惊跳抱被", note: "视情况看是否要买" },
-      { name: "儿童伸缩衣架", note: "先备20个，带夹的也要买" }
+      { name: "儿童伸缩衣架", note: "妈买" }
     ],
     "洗护类": [
       { name: "婴儿面霜", brand: "悦哺", price: 8.8, note: "10g" },
@@ -229,7 +254,7 @@ const RAW_DATA = {
       { name: "抚触油", brand: "戴可思", price: 33.04, initBought: true, note: "100ML" },
       { name: "洗护二合一", brand: "贝德美" },
       { name: "婴儿洗衣机", note: "视情况看是否要买" },
-      { name: "浴盆；洗脸盆", brand: "iuu", price: 70, initBought: true, note: "浴盆+3个小盆" },
+      { name: "浴盆；洗脸盆", brand: "iuu", price: "70；10", initBought: true, note: "浴盆+3个小盆" },
       { name: "水温计", brand: "嫚熙", price: 13.39, initBought: true },
       { name: "婴儿体温计" },
       { name: "指甲剪套装", price: 20, initBought: true }
@@ -239,10 +264,7 @@ const RAW_DATA = {
       { name: "尿布台", brand: "ABCmokoo", price: 105.16, initBought: true },
       { name: "护理台", price: 389, initBought: true },
       { name: "消毒柜" },
-      { name: "婴儿床", price: 175, initBought: true },
-      { name: "恒温壶", note: "不需要买" },
-      { name: "定型枕" },
-      { name: "盖毯" }
+      { name: "婴儿床", price: 175, initBought: true }
     ],
     "出行类": [
       { name: "安全座椅", note: "先不着急买" },
@@ -282,6 +304,7 @@ const DOCS = [
 
 // ─── Persistence (Local) ────────────────────────────────────
 const LOCAL_STATE_KEY = 'sl_local_state';
+const LOCAL_NOTES_KEY = 'sl_local_notes';
 const LOCAL_DOC_KEY = 'sl_local_docs';
 const SYNC_CONFIG_KEY = 'sl_sync_config';
 
@@ -292,10 +315,12 @@ function saveLocal(key, val) {
   localStorage.setItem(key, JSON.stringify(val));
 }
 
-function loadState()    { return loadLocal(LOCAL_STATE_KEY); }
-function saveState(s)   { saveLocal(LOCAL_STATE_KEY, s); }
-function loadDocs()     { return loadLocal(LOCAL_DOC_KEY); }
-function saveDocs(d)    { saveLocal(LOCAL_DOC_KEY, d); }
+function loadState()  { return loadLocal(LOCAL_STATE_KEY); }
+function saveState(s) { saveLocal(LOCAL_STATE_KEY, s); }
+function loadNotes()  { return loadLocal(LOCAL_NOTES_KEY); }
+function saveNotes(n) { saveLocal(LOCAL_NOTES_KEY, n); }
+function loadDocs()   { return loadLocal(LOCAL_DOC_KEY); }
+function saveDocs(d)  { saveLocal(LOCAL_DOC_KEY, d); }
 
 function loadSyncCfg()  { return loadLocal(SYNC_CONFIG_KEY); }
 function saveSyncCfg(c) { saveLocal(SYNC_CONFIG_KEY, c); }
@@ -306,7 +331,6 @@ function itemKey(cat, sub, name) { return `${cat}|${sub}|${name}`; }
 const STATE_FILE = 'state.json';
 
 function utf8ToBase64(str) {
-  // Properly handle Unicode → UTF-8 bytes → base64
   const encoder = new TextEncoder();
   const bytes = encoder.encode(str);
   let binary = '';
@@ -317,7 +341,6 @@ function utf8ToBase64(str) {
 }
 
 function base64ToUtf8(base64) {
-  // base64 → UTF-8 bytes → string
   const binary = atob(base64.replace(/\n/g, ''));
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -334,15 +357,14 @@ async function fetchCloudState(token, repo) {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = await res.json();
-  // Save SHA for later updates
   _lastSyncSha = data.sha;
   const json = base64ToUtf8(data.content);
   return JSON.parse(json);
 }
 
-async function pushCloudState(token, repo, state, docs, sha) {
+async function pushCloudState(token, repo, state, notes, docs, sha) {
   const url = `https://api.github.com/repos/${repo}/contents/${STATE_FILE}`;
-  const payload = JSON.stringify({ items: state, docs: docs });
+  const payload = JSON.stringify({ items: state, notes: notes, docs: docs });
   const content = utf8ToBase64(payload);
   const body = { message: "sync", content: content, branch: "main" };
   if (sha) body.sha = sha;
@@ -381,9 +403,7 @@ async function syncToCloud() {
   _syncing = true;
   updateSyncUI('busy');
   try {
-    const state = loadState();
-    const docs = loadDocs();
-    const sha = await pushCloudState(cfg.token, cfg.repo, state, docs, _lastSyncSha || undefined);
+    const sha = await pushCloudState(cfg.token, cfg.repo, loadState(), loadNotes(), loadDocs(), _lastSyncSha || undefined);
     _lastSyncSha = sha;
     _syncError = null;
     updateSyncUI('ok');
@@ -401,6 +421,7 @@ async function syncFromCloud() {
     const data = await fetchCloudState(cfg.token, cfg.repo);
     if (data) {
       if (data.items) saveState(data.items);
+      if (data.notes) saveNotes(data.notes);
       if (data.docs) saveDocs(data.docs);
       _syncError = null;
     }
@@ -451,6 +472,7 @@ const SUB_COLORS = {
 // ─── Render ─────────────────────────────────────────────────
 function render() {
   const state = loadState();
+  const notes = loadNotes();
   const docState = loadDocs();
   const app = document.getElementById('app');
   let total = 0, bought = 0;
@@ -467,6 +489,7 @@ function render() {
       for (const item of items) {
         const key = itemKey(bigCat, subCat, item.name);
         const isBought = state[key] !== undefined ? state[key] : (item.initBought || false);
+        const noteText = notes[key] !== undefined ? notes[key] : (item.note || '');
         total++; catTotal++;
         if (isBought) { bought++; catBought++; }
         const dc = isBought ? 'done' : '';
@@ -478,9 +501,10 @@ function render() {
               <div class="item-meta">
                 ${item.brand ? `<span class="brand">${item.brand}</span>` : ''}
                 ${item.price ? `<span class="price">¥${item.price}</span>` : ''}
-                ${item.note ? `<span class="note">${item.note}</span>` : ''}
+                ${noteText ? `<span class="note">📝 ${noteText}</span>` : ''}
               </div>
             </div>
+            <div class="note-edit-btn" data-editkey="${key}" data-itemname="${item.name}" title="编辑备注">✎</div>
           </div>`;
       }
       subHtml += `
@@ -528,9 +552,10 @@ function render() {
   document.getElementById('boughtCount').textContent = bought + ' 已买';
   document.getElementById('pendingCount').textContent = (total - bought) + ' 待买';
 
-  // Bind clicks
+  // Bind item row clicks (toggle bought)
   document.querySelectorAll('.item-row').forEach(el => {
-    el.addEventListener('click', function() {
+    el.addEventListener('click', function(e) {
+      if (e.target.closest('.note-edit-btn')) return;
       const key = this.dataset.key;
       const s = loadState();
       s[key] = !(s[key] !== undefined ? s[key] : false);
@@ -540,6 +565,15 @@ function render() {
     });
   });
 
+  // Bind note edit buttons
+  document.querySelectorAll('.note-edit-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openNoteModal(this.dataset.editkey, this.dataset.itemname);
+    });
+  });
+
+  // Bind doc clicks
   document.querySelectorAll('.doc-item').forEach(el => {
     el.addEventListener('click', function() {
       const dk = this.dataset.dockey;
@@ -550,6 +584,37 @@ function render() {
       syncToCloud();
     });
   });
+}
+
+// ─── Note Modal ─────────────────────────────────────────────
+let _editingNoteKey = null;
+
+function openNoteModal(key, itemName) {
+  _editingNoteKey = key;
+  document.getElementById('noteItemName').textContent = itemName;
+  const notes = loadNotes();
+  document.getElementById('noteInput').value = notes[key] !== undefined ? notes[key] : '';
+  document.getElementById('noteModalOverlay').classList.add('show');
+}
+
+function hideNoteModal() {
+  document.getElementById('noteModalOverlay').classList.remove('show');
+  _editingNoteKey = null;
+}
+
+function saveNote() {
+  if (!_editingNoteKey) return;
+  const notes = loadNotes();
+  const val = document.getElementById('noteInput').value.trim();
+  if (val) {
+    notes[_editingNoteKey] = val;
+  } else {
+    delete notes[_editingNoteKey];
+  }
+  saveNotes(notes);
+  hideNoteModal();
+  render();
+  syncToCloud();
 }
 
 // ─── Toggle ─────────────────────────────────────────────────
@@ -565,8 +630,9 @@ function toggleSub(el) {
 }
 
 function resetAll() {
-  if (confirm('确认重置所有勾选状态？')) {
+  if (confirm('确认重置所有勾选状态和备注？')) {
     localStorage.removeItem(LOCAL_STATE_KEY);
+    localStorage.removeItem(LOCAL_NOTES_KEY);
     localStorage.removeItem(LOCAL_DOC_KEY);
     render();
     syncToCloud();
@@ -589,7 +655,6 @@ function saveSetup() {
   if (!token) { alert('请输入 GitHub 令牌'); return; }
   saveSyncCfg({ token, repo });
   hideSetup();
-  // Try to sync
   syncFromCloud().then(() => {
     render();
     syncToCloud();
@@ -608,9 +673,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// Close modal on overlay click
 document.getElementById('modalOverlay').addEventListener('click', function(e) {
   if (e.target === this) hideSetup();
+});
+document.getElementById('noteModalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) hideNoteModal();
 });
 </script>
 
